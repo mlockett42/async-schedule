@@ -37,6 +37,7 @@ Usage:
 [2] https://github.com/Rykian/clockwork
 [3] https://adam.herokuapp.com/past/2010/6/30/replace_cron_with_clockwork/
 """
+import asyncio
 from collections.abc import Hashable
 import datetime
 import functools
@@ -99,7 +100,7 @@ class Scheduler(object):
         for job in sorted(runnable_jobs):
             await self._run_job(job)
 
-    def run_all(self, delay_seconds: int = 0) -> None:
+    async def run_all(self, delay_seconds: int = 0) -> None:
         """
         Run all jobs regardless if they are scheduled to run or not.
 
@@ -115,8 +116,8 @@ class Scheduler(object):
             delay_seconds,
         )
         for job in self.jobs[:]:
-            self._run_job(job)
-            time.sleep(delay_seconds)
+            await self._run_job(job)
+            await asyncio.sleep(delay_seconds)
 
     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
         """
@@ -641,7 +642,7 @@ class Job(object):
         assert self.next_run is not None, "must run _schedule_next_run before"
         return datetime.datetime.now() >= self.next_run
 
-    def run(self):
+    async def run(self):
         """
         Run the job and immediately reschedule it.
         If the job's deadline is reached (configured using .until()), the job is not
@@ -658,7 +659,7 @@ class Job(object):
             return CancelJob
 
         logger.debug("Running job %s", self)
-        ret = self.job_func()
+        ret = await self.job_func()
         self.last_run = datetime.datetime.now()
         self._schedule_next_run()
 
@@ -780,11 +781,11 @@ async def run_pending() -> None:
     await default_scheduler.run_pending()
 
 
-def run_all(delay_seconds: int = 0) -> None:
+async def run_all(delay_seconds: int = 0) -> None:
     """Calls :meth:`run_all <Scheduler.run_all>` on the
     :data:`default scheduler instance <default_scheduler>`.
     """
-    default_scheduler.run_all(delay_seconds=delay_seconds)
+    await default_scheduler.run_all(delay_seconds=delay_seconds)
 
 
 def get_jobs(tag: Optional[Hashable] = None) -> List[Job]:

@@ -1,4 +1,5 @@
 """Unit tests for schedule.py"""
+from asyncio.futures import Future
 import datetime
 import functools
 import mock
@@ -20,8 +21,10 @@ from schedule import (
 
 
 def make_mock_job(name=None):
-    job = mock.Mock()
+    job = mock.MagicMock()
     job.__name__ = name or "job"
+    job.return_value = Future()
+    job.return_value.set_result(None)
     return job
 
 
@@ -66,7 +69,7 @@ class mock_datetime(object):
         datetime.datetime = self.original_datetime
 
 
-class SchedulerTests(unittest.TestCase):
+class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         schedule.clear()
 
@@ -264,7 +267,8 @@ class SchedulerTests(unittest.TestCase):
         with self.assertRaises(IntervalError):
             every(interval=2).sunday
 
-    def test_until_time(self):
+    @pytest.mark.asyncio
+    async def test_until_time(self):
         mock_job = make_mock_job()
         # Check argument parsing
         with mock_datetime(2020, 1, 1, 10, 0, 0) as m:
@@ -323,11 +327,11 @@ class SchedulerTests(unittest.TestCase):
             mock_job.reset_mock()
             every(5).seconds.until(datetime.time(11, 35, 20)).do(mock_job)
             with mock_datetime(2020, 1, 1, 11, 35, 15):
-                schedule.run_pending()
+                await schedule.run_pending()
                 assert mock_job.call_count == 1
                 assert len(schedule.jobs) == 1
             with mock_datetime(2020, 1, 1, 11, 35, 20):
-                schedule.run_all()
+                await schedule.run_all()
                 assert mock_job.call_count == 2
                 assert len(schedule.jobs) == 0
 
@@ -337,7 +341,7 @@ class SchedulerTests(unittest.TestCase):
             mock_job.reset_mock()
             every(5).seconds.until(datetime.time(11, 35, 20)).do(mock_job)
             with mock_datetime(2020, 1, 1, 11, 35, 50):
-                schedule.run_pending()
+                await schedule.run_pending()
                 assert mock_job.call_count == 0
                 assert len(schedule.jobs) == 0
 
@@ -437,7 +441,8 @@ class SchedulerTests(unittest.TestCase):
                 == 16
             )
 
-    def test_next_run_time_day_end(self):
+    @pytest.mark.asyncio
+    async def test_next_run_time_day_end(self):
         mock_job = make_mock_job()
         # At day 1, schedule job to run at daily 23:30
         with mock_datetime(2010, 12, 1, 23, 0, 0):
@@ -450,18 +455,19 @@ class SchedulerTests(unittest.TestCase):
         # scheduled at 23:30 the same day. This simulates a job that started
         # on day 1 at 23:30 and took 1,5 hours to finish
         with mock_datetime(2010, 12, 2, 1, 0, 0):
-            job.run()
+            await job.run()
             assert job.next_run.day == 2
             assert job.next_run.hour == 23
 
         # Run the job at 23:30 on day 2, afterwards the job should be
         # scheduled at 23:30 the next day
         with mock_datetime(2010, 12, 2, 23, 30, 0):
-            job.run()
+            await job.run()
             assert job.next_run.day == 3
             assert job.next_run.hour == 23
 
-    def test_next_run_time_hour_end(self):
+    @pytest.mark.asyncio
+    async def test_next_run_time_hour_end(self):
         mock_job = make_mock_job()
         with mock_datetime(2010, 10, 10, 12, 0, 0):
             job = every().hour.at(":10").do(mock_job)
@@ -469,16 +475,17 @@ class SchedulerTests(unittest.TestCase):
             assert job.next_run.minute == 10
 
         with mock_datetime(2010, 10, 10, 13, 0, 0):
-            job.run()
+            await job.run()
             assert job.next_run.hour == 13
             assert job.next_run.minute == 10
 
         with mock_datetime(2010, 10, 10, 13, 15, 0):
-            job.run()
+            await job.run()
             assert job.next_run.hour == 14
             assert job.next_run.minute == 10
 
-    def test_next_run_time_minute_end(self):
+    @pytest.mark.asyncio
+    async def test_next_run_time_minute_end(self):
         mock_job = make_mock_job()
         with mock_datetime(2010, 10, 10, 10, 10, 0):
             job = every().minute.at(":15").do(mock_job)
@@ -486,70 +493,75 @@ class SchedulerTests(unittest.TestCase):
             assert job.next_run.second == 15
 
         with mock_datetime(2010, 10, 10, 10, 10, 59):
-            job.run()
+            await job.run()
             assert job.next_run.minute == 11
             assert job.next_run.second == 15
 
         with mock_datetime(2010, 10, 10, 10, 12, 14):
-            job.run()
+            await job.run()
             assert job.next_run.minute == 12
             assert job.next_run.second == 15
 
         with mock_datetime(2010, 10, 10, 10, 12, 16):
-            job.run()
+            await job.run()
             assert job.next_run.minute == 13
             assert job.next_run.second == 15
 
-    def test_run_all(self):
+    @pytest.mark.asyncio
+    async def test_run_all(self):
         mock_job = make_mock_job()
         every().minute.do(mock_job)
         every().hour.do(mock_job)
         every().day.at("11:00").do(mock_job)
-        schedule.run_all()
+        await schedule.run_all()
         assert mock_job.call_count == 3
 
-    def test_run_all_with_decorator(self):
+    @pytest.mark.asyncio
+    async def test_run_all_with_decorator(self):
         mock_job = make_mock_job()
 
         @repeat(every().minute)
-        def job1():
-            mock_job()
+        async def job1():
+            await mock_job()
 
         @repeat(every().hour)
-        def job2():
-            mock_job()
+        async def job2():
+            await mock_job()
 
         @repeat(every().day.at("11:00"))
-        def job3():
-            mock_job()
+        async def job3():
+            await mock_job()
 
-        schedule.run_all()
+        await schedule.run_all()
         assert mock_job.call_count == 3
 
-    def test_run_all_with_decorator_args(self):
+    @pytest.mark.asyncio
+    async def test_run_all_with_decorator_args(self):
         mock_job = make_mock_job()
 
         @repeat(every().minute, 1, 2, "three", foo=23, bar={})
-        def job(*args, **kwargs):
-            mock_job(*args, **kwargs)
+        async def job(*args, **kwargs):
+            await mock_job(*args, **kwargs)
 
-        schedule.run_all()
+        await schedule.run_all()
         mock_job.assert_called_once_with(1, 2, "three", foo=23, bar={})
 
-    def test_run_all_with_decorator_defaultargs(self):
+    @pytest.mark.asyncio
+    async def test_run_all_with_decorator_defaultargs(self):
         mock_job = make_mock_job()
 
         @repeat(every().minute)
-        def job(nothing=None):
-            mock_job(nothing)
+        async def job(nothing=None):
+            await mock_job(nothing)
 
-        schedule.run_all()
+        await schedule.run_all()
         mock_job.assert_called_once_with(None)
 
-    def test_job_func_args_are_passed_on(self):
+    @pytest.mark.asyncio
+    async def test_job_func_args_are_passed_on(self):
         mock_job = make_mock_job()
         every().second.do(mock_job, 1, 2, "three", foo=23, bar={})
-        schedule.run_all()
+        await schedule.run_all()
         mock_job.assert_called_once_with(1, 2, "three", foo=23, bar={})
 
     def test_to_string(self):
@@ -610,7 +622,8 @@ class SchedulerTests(unittest.TestCase):
         assert "bar=True" in job_str
         assert "somekey=23" in job_str
 
-    def test_run_pending(self):
+    @pytest.mark.asyncio
+    async def test_run_pending(self):
         """Check that run_pending() runs pending jobs.
         We do this by overriding datetime.datetime with mock objects
         that represent increasing system times.
@@ -628,79 +641,82 @@ class SchedulerTests(unittest.TestCase):
             every().hour.do(mock_job)
             every().day.do(mock_job)
             every().sunday.do(mock_job)
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 6, 12, 16):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 1
 
         with mock_datetime(2010, 1, 6, 13, 16):
             mock_job.reset_mock()
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 2
 
         with mock_datetime(2010, 1, 7, 13, 16):
             mock_job.reset_mock()
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 3
 
         with mock_datetime(2010, 1, 10, 13, 16):
             mock_job.reset_mock()
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 4
 
-    def test_run_every_weekday_at_specific_time_today(self):
+    @pytest.mark.asyncio
+    async def test_run_every_weekday_at_specific_time_today(self):
         mock_job = make_mock_job()
         with mock_datetime(2010, 1, 6, 13, 16):
             every().wednesday.at("14:12").do(mock_job)
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 6, 14, 16):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 1
 
-    def test_run_every_weekday_at_specific_time_past_today(self):
+    @pytest.mark.asyncio
+    async def test_run_every_weekday_at_specific_time_past_today(self):
         mock_job = make_mock_job()
         with mock_datetime(2010, 1, 6, 13, 16):
             every().wednesday.at("13:15").do(mock_job)
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 13, 13, 14):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 13, 13, 16):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 1
 
-    def test_run_every_n_days_at_specific_time(self):
+    @pytest.mark.asyncio
+    async def test_run_every_n_days_at_specific_time(self):
         mock_job = make_mock_job()
         with mock_datetime(2010, 1, 6, 11, 29):
             every(2).days.at("11:30").do(mock_job)
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 6, 11, 31):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 7, 11, 31):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 8, 11, 29):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 8, 11, 31):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 1
 
         with mock_datetime(2010, 1, 10, 11, 31):
-            schedule.run_pending()
+            await schedule.run_pending()
             assert mock_job.call_count == 2
 
     def test_next_run_property(self):
@@ -726,8 +742,9 @@ class SchedulerTests(unittest.TestCase):
             assert schedule.next_run() is None
             assert schedule.idle_seconds() is None
 
-    def test_cancel_job(self):
-        def stop_job():
+    @pytest.mark.asyncio
+    async def test_cancel_job(self):
+        async def stop_job():
             return schedule.CancelJob
 
         mock_job = make_mock_job()
@@ -736,7 +753,7 @@ class SchedulerTests(unittest.TestCase):
         mj = every().second.do(mock_job)
         assert len(schedule.jobs) == 2
 
-        schedule.run_all()
+        await schedule.run_all()
         assert len(schedule.jobs) == 1
         assert schedule.jobs[0] == mj
 
@@ -748,8 +765,9 @@ class SchedulerTests(unittest.TestCase):
         schedule.cancel_job(mj)
         assert len(schedule.jobs) == 0
 
-    def test_cancel_jobs(self):
-        def stop_job():
+    @pytest.mark.asyncio
+    async def test_cancel_jobs(self):
+        async def stop_job():
             return schedule.CancelJob
 
         every().second.do(stop_job)
@@ -757,7 +775,7 @@ class SchedulerTests(unittest.TestCase):
         every().second.do(stop_job)
         assert len(schedule.jobs) == 3
 
-        schedule.run_all()
+        await schedule.run_all()
         assert len(schedule.jobs) == 0
 
     def test_tag_type_enforcement(self):
@@ -795,14 +813,15 @@ class SchedulerTests(unittest.TestCase):
         schedule.clear()
         assert len(schedule.jobs) == 0
 
-    def test_clear_by_tag(self):
+    @pytest.mark.asyncio
+    async def test_clear_by_tag(self):
         every().second.do(make_mock_job(name="job1")).tag("tag1")
         every().second.do(make_mock_job(name="job2")).tag("tag1", "tag2")
         every().second.do(make_mock_job(name="job3")).tag(
             "tag3", "tag3", "tag3", "tag2"
         )
         assert len(schedule.jobs) == 3
-        schedule.run_all()
+        await schedule.run_all()
         assert len(schedule.jobs) == 3
         schedule.clear("tag3")
         assert len(schedule.jobs) == 2
@@ -814,7 +833,8 @@ class SchedulerTests(unittest.TestCase):
         schedule.clear()
         assert len(schedule.jobs) == 0
 
-    def test_misconfigured_job_wont_break_scheduler(self):
+    @pytest.mark.asyncio
+    async def test_misconfigured_job_wont_break_scheduler(self):
         """
         Ensure an interrupted job definition chain won't break
         the scheduler instance permanently.
@@ -822,11 +842,7 @@ class SchedulerTests(unittest.TestCase):
         scheduler = schedule.Scheduler()
         scheduler.every()
         scheduler.every(10).seconds
-        scheduler.run_pending()
-
-class AsyncSchedulerTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
-        schedule.clear()
+        await scheduler.run_pending()
 
     @pytest.mark.asyncio
     async def test_run_pending_async(self):
