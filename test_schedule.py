@@ -10,8 +10,8 @@ import pytest
 # "class already defined", and "too many public methods" messages:
 # pylint: disable-msg=R0201,C0111,E0102,R0904,R0901
 
-import schedule
-from schedule import (
+import async_schedule
+from async_schedule import (
     every,
     repeat,
     ScheduleError,
@@ -71,7 +71,7 @@ class mock_datetime(object):
 
 class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        schedule.clear()
+        async_schedule.clear()
 
     def test_time_units(self):
         assert every().seconds.unit == "seconds"
@@ -80,7 +80,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         assert every().days.unit == "days"
         assert every().weeks.unit == "weeks"
 
-        job_instance = schedule.Job(interval=2)
+        job_instance = async_schedule.Job(interval=2)
         # without a context manager, it incorrectly raises an error because
         # it is not callable
         with self.assertRaises(IntervalError):
@@ -322,28 +322,28 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         self.assertRaises(ScheduleValueError, every().day.until, datetime.time(hour=5))
 
         # Unschedule job after next_run passes the deadline
-        schedule.clear()
+        async_schedule.clear()
         with mock_datetime(2020, 1, 1, 11, 35, 10):
             mock_job.reset_mock()
             every(5).seconds.until(datetime.time(11, 35, 20)).do(mock_job)
             with mock_datetime(2020, 1, 1, 11, 35, 15):
-                await schedule.run_pending()
+                await async_schedule.run_pending()
                 assert mock_job.call_count == 1
-                assert len(schedule.jobs) == 1
+                assert len(async_schedule.jobs) == 1
             with mock_datetime(2020, 1, 1, 11, 35, 20):
-                await schedule.run_all()
+                await async_schedule.run_all()
                 assert mock_job.call_count == 2
-                assert len(schedule.jobs) == 0
+                assert len(async_schedule.jobs) == 0
 
         # Unschedule job because current execution time has passed deadline
-        schedule.clear()
+        async_schedule.clear()
         with mock_datetime(2020, 1, 1, 11, 35, 10):
             mock_job.reset_mock()
             every(5).seconds.until(datetime.time(11, 35, 20)).do(mock_job)
             with mock_datetime(2020, 1, 1, 11, 35, 50):
-                await schedule.run_pending()
+                await async_schedule.run_pending()
                 assert mock_job.call_count == 0
-                assert len(schedule.jobs) == 0
+                assert len(async_schedule.jobs) == 0
 
     def test_weekday_at_todady(self):
         mock_job = make_mock_job()
@@ -421,7 +421,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
     def test_next_run_time(self):
         with mock_datetime(2010, 1, 6, 12, 15):
             mock_job = make_mock_job()
-            assert schedule.next_run() is None
+            assert async_schedule.next_run() is None
             assert every().minute.do(mock_job).next_run.minute == 16
             assert every(5).minutes.do(mock_job).next_run.minute == 20
             assert every().hour.do(mock_job).next_run.hour == 13
@@ -513,7 +513,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         every().minute.do(mock_job)
         every().hour.do(mock_job)
         every().day.at("11:00").do(mock_job)
-        await schedule.run_all()
+        await async_schedule.run_all()
         assert mock_job.call_count == 3
 
     @pytest.mark.asyncio
@@ -532,7 +532,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         async def job3():
             await mock_job()
 
-        await schedule.run_all()
+        await async_schedule.run_all()
         assert mock_job.call_count == 3
 
     @pytest.mark.asyncio
@@ -543,7 +543,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         async def job(*args, **kwargs):
             await mock_job(*args, **kwargs)
 
-        await schedule.run_all()
+        await async_schedule.run_all()
         mock_job.assert_called_once_with(1, 2, "three", foo=23, bar={})
 
     @pytest.mark.asyncio
@@ -554,14 +554,14 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         async def job(nothing=None):
             await mock_job(nothing)
 
-        await schedule.run_all()
+        await async_schedule.run_all()
         mock_job.assert_called_once_with(None)
 
     @pytest.mark.asyncio
     async def test_job_func_args_are_passed_on(self):
         mock_job = make_mock_job()
         every().second.do(mock_job, 1, 2, "three", foo=23, bar={})
-        await schedule.run_all()
+        await async_schedule.run_all()
         mock_job.assert_called_once_with(1, 2, "three", foo=23, bar={})
 
     def test_to_string(self):
@@ -641,26 +641,26 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
             every().hour.do(mock_job)
             every().day.do(mock_job)
             every().sunday.do(mock_job)
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 6, 12, 16):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 1
 
         with mock_datetime(2010, 1, 6, 13, 16):
             mock_job.reset_mock()
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 2
 
         with mock_datetime(2010, 1, 7, 13, 16):
             mock_job.reset_mock()
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 3
 
         with mock_datetime(2010, 1, 10, 13, 16):
             mock_job.reset_mock()
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 4
 
     @pytest.mark.asyncio
@@ -668,11 +668,11 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         mock_job = make_mock_job()
         with mock_datetime(2010, 1, 6, 13, 16):
             every().wednesday.at("14:12").do(mock_job)
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 6, 14, 16):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 1
 
     @pytest.mark.asyncio
@@ -680,15 +680,15 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         mock_job = make_mock_job()
         with mock_datetime(2010, 1, 6, 13, 16):
             every().wednesday.at("13:15").do(mock_job)
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 13, 13, 14):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 13, 13, 16):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 1
 
     @pytest.mark.asyncio
@@ -696,27 +696,27 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         mock_job = make_mock_job()
         with mock_datetime(2010, 1, 6, 11, 29):
             every(2).days.at("11:30").do(mock_job)
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 6, 11, 31):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 7, 11, 31):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 8, 11, 29):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 0
 
         with mock_datetime(2010, 1, 8, 11, 31):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 1
 
         with mock_datetime(2010, 1, 10, 11, 31):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert mock_job.call_count == 2
 
     def test_next_run_property(self):
@@ -726,57 +726,57 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
             daily_job = make_mock_job("daily")
             every().day.do(daily_job)
             every().hour.do(hourly_job)
-            assert len(schedule.jobs) == 2
+            assert len(async_schedule.jobs) == 2
             # Make sure the hourly job is first
-            assert schedule.next_run() == original_datetime(2010, 1, 6, 14, 16)
+            assert async_schedule.next_run() == original_datetime(2010, 1, 6, 14, 16)
 
     def test_idle_seconds(self):
-        assert schedule.next_run() is None
-        assert schedule.idle_seconds() is None
+        assert async_schedule.next_run() is None
+        assert async_schedule.idle_seconds() is None
 
         mock_job = make_mock_job()
         with mock_datetime(2020, 12, 9, 21, 46):
             job = every().hour.do(mock_job)
-            assert schedule.idle_seconds() == 60 * 60
-            schedule.cancel_job(job)
-            assert schedule.next_run() is None
-            assert schedule.idle_seconds() is None
+            assert async_schedule.idle_seconds() == 60 * 60
+            async_schedule.cancel_job(job)
+            assert async_schedule.next_run() is None
+            assert async_schedule.idle_seconds() is None
 
     @pytest.mark.asyncio
     async def test_cancel_job(self):
         async def stop_job():
-            return schedule.CancelJob
+            return async_schedule.CancelJob
 
         mock_job = make_mock_job()
 
         every().second.do(stop_job)
         mj = every().second.do(mock_job)
-        assert len(schedule.jobs) == 2
+        assert len(async_schedule.jobs) == 2
 
-        await schedule.run_all()
-        assert len(schedule.jobs) == 1
-        assert schedule.jobs[0] == mj
+        await async_schedule.run_all()
+        assert len(async_schedule.jobs) == 1
+        assert async_schedule.jobs[0] == mj
 
-        schedule.cancel_job("Not a job")
-        assert len(schedule.jobs) == 1
-        schedule.default_scheduler.cancel_job("Not a job")
-        assert len(schedule.jobs) == 1
+        async_schedule.cancel_job("Not a job")
+        assert len(async_schedule.jobs) == 1
+        async_schedule.default_scheduler.cancel_job("Not a job")
+        assert len(async_schedule.jobs) == 1
 
-        schedule.cancel_job(mj)
-        assert len(schedule.jobs) == 0
+        async_schedule.cancel_job(mj)
+        assert len(async_schedule.jobs) == 0
 
     @pytest.mark.asyncio
     async def test_cancel_jobs(self):
         async def stop_job():
-            return schedule.CancelJob
+            return async_schedule.CancelJob
 
         every().second.do(stop_job)
         every().second.do(stop_job)
         every().second.do(stop_job)
-        assert len(schedule.jobs) == 3
+        assert len(async_schedule.jobs) == 3
 
-        await schedule.run_all()
-        assert len(schedule.jobs) == 0
+        await async_schedule.run_all()
+        assert len(async_schedule.jobs) == 0
 
     def test_tag_type_enforcement(self):
         job1 = every().second.do(make_mock_job(name="job1"))
@@ -791,27 +791,27 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         every().second.do(make_mock_job()).tag("job3", "tag3", "tag4")
 
         # Test None input yields all 3
-        jobs = schedule.get_jobs()
+        jobs = async_schedule.get_jobs()
         assert len(jobs) == 3
         assert {"job1", "job2", "job3"}.issubset(
             {*jobs[0].tags, *jobs[1].tags, *jobs[2].tags}
         )
 
         # Test each 1:1 tag:job
-        jobs = schedule.get_jobs("tag1")
+        jobs = async_schedule.get_jobs("tag1")
         assert len(jobs) == 1
         assert "job1" in jobs[0].tags
 
         # Test multiple jobs found.
-        jobs = schedule.get_jobs("tag4")
+        jobs = async_schedule.get_jobs("tag4")
         assert len(jobs) == 2
         assert "job1" not in {*jobs[0].tags, *jobs[1].tags}
 
         # Test no tag.
-        jobs = schedule.get_jobs("tag5")
+        jobs = async_schedule.get_jobs("tag5")
         assert len(jobs) == 0
-        schedule.clear()
-        assert len(schedule.jobs) == 0
+        async_schedule.clear()
+        assert len(async_schedule.jobs) == 0
 
     @pytest.mark.asyncio
     async def test_clear_by_tag(self):
@@ -820,18 +820,18 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         every().second.do(make_mock_job(name="job3")).tag(
             "tag3", "tag3", "tag3", "tag2"
         )
-        assert len(schedule.jobs) == 3
-        await schedule.run_all()
-        assert len(schedule.jobs) == 3
-        schedule.clear("tag3")
-        assert len(schedule.jobs) == 2
-        schedule.clear("tag1")
-        assert len(schedule.jobs) == 0
+        assert len(async_schedule.jobs) == 3
+        await async_schedule.run_all()
+        assert len(async_schedule.jobs) == 3
+        async_schedule.clear("tag3")
+        assert len(async_schedule.jobs) == 2
+        async_schedule.clear("tag1")
+        assert len(async_schedule.jobs) == 0
         every().second.do(make_mock_job(name="job1"))
         every().second.do(make_mock_job(name="job2"))
         every().second.do(make_mock_job(name="job3"))
-        schedule.clear()
-        assert len(schedule.jobs) == 0
+        async_schedule.clear()
+        assert len(async_schedule.jobs) == 0
 
     @pytest.mark.asyncio
     async def test_misconfigured_job_wont_break_scheduler(self):
@@ -839,7 +839,7 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
         Ensure an interrupted job definition chain won't break
         the scheduler instance permanently.
         """
-        scheduler = schedule.Scheduler()
+        scheduler = async_schedule.Scheduler()
         scheduler.every()
         scheduler.every(10).seconds
         await scheduler.run_pending()
@@ -859,9 +859,9 @@ class SchedulerTests(unittest.IsolatedAsyncioTestCase):
 
         with mock_datetime(2010, 1, 6, 12, 15):
             every().minute.do(mock_async_job)
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert async_job_was_run == False
 
         with mock_datetime(2010, 1, 6, 12, 16):
-            await schedule.run_pending()
+            await async_schedule.run_pending()
             assert async_job_was_run == True

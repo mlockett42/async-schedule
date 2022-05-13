@@ -47,7 +47,7 @@ import re
 import time
 from typing import Set, List, Optional, Callable, Union
 
-logger = logging.getLogger("schedule")
+logger = logging.getLogger("async_schedule")
 
 
 class ScheduleError(Exception):
