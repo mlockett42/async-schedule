@@ -15,17 +15,18 @@ def read_file(filename):
 
 
 setup(
-    name="schedule",
-    packages=["schedule"],
+    name="async-schedule",
+    packages=["async_schedule"],
     version=SCHEDULE_VERSION,
-    description="Job scheduling for humans.",
+    description="Asynchronous Job scheduling for humans.",
     long_description=read_file("README.rst"),
     license="MIT",
-    author="Daniel Bader",
-    author_email="mail@dbader.org",
-    url="https://github.com/dbader/schedule",
+    author="Mark Lockett",
+    author_email="mark@deliveryengine.net",
+    url="https://github.com/mlockett42/async-schedule",
     download_url=SCHEDULE_DOWNLOAD_URL,
     keywords=[
+        "async",
         "schedule",
         "periodic",
         "jobs",
