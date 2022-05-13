@@ -3,6 +3,7 @@ import datetime
 import functools
 import mock
 import unittest
+import pytest
 
 # Silence "missing docstring", "method could be a function",
 # "class already defined", and "too many public methods" messages:
@@ -822,3 +823,29 @@ class SchedulerTests(unittest.TestCase):
         scheduler.every()
         scheduler.every(10).seconds
         scheduler.run_pending()
+
+class AsyncSchedulerTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        schedule.clear()
+
+    @pytest.mark.asyncio
+    async def test_run_pending_async(self):
+        """Check that run_pending() runs pending async jobs.
+
+        We do this by passing in an async function and check it was called asyncrobously
+        """
+
+        async_job_was_run = False
+
+        async def mock_async_job():
+            nonlocal async_job_was_run
+            async_job_was_run = True
+
+        with mock_datetime(2010, 1, 6, 12, 15):
+            every().minute.do(mock_async_job)
+            await schedule.run_pending()
+            assert async_job_was_run == False
+
+        with mock_datetime(2010, 1, 6, 12, 16):
+            await schedule.run_pending()
+            assert async_job_was_run == True

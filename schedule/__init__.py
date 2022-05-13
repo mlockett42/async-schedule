@@ -85,7 +85,7 @@ class Scheduler(object):
     def __init__(self) -> None:
         self.jobs: List[Job] = []
 
-    def run_pending(self) -> None:
+    async def run_pending(self) -> None:
         """
         Run all jobs that are scheduled to run.
 
@@ -97,7 +97,7 @@ class Scheduler(object):
         """
         runnable_jobs = (job for job in self.jobs if job.should_run)
         for job in sorted(runnable_jobs):
-            self._run_job(job)
+            await self._run_job(job)
 
     def run_all(self, delay_seconds: int = 0) -> None:
         """
@@ -168,8 +168,8 @@ class Scheduler(object):
         job = Job(interval, self)
         return job
 
-    def _run_job(self, job: "Job") -> None:
-        ret = job.run()
+    async def _run_job(self, job: "Job") -> None:
+        ret = await job.run()
         if isinstance(ret, CancelJob) or ret is CancelJob:
             self.cancel_job(job)
 
@@ -773,11 +773,11 @@ def every(interval: int = 1) -> Job:
     return default_scheduler.every(interval)
 
 
-def run_pending() -> None:
+async def run_pending() -> None:
     """Calls :meth:`run_pending <Scheduler.run_pending>` on the
     :data:`default scheduler instance <default_scheduler>`.
     """
-    default_scheduler.run_pending()
+    await default_scheduler.run_pending()
 
 
 def run_all(delay_seconds: int = 0) -> None:
